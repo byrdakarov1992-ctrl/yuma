@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yuma</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* ===================== ПЕРЕМЕННЫЕ ===================== */
+        :root {
+            --cat-accent:     #a855f7;
+            --cat-eyes:       #06b6d4;
+            --base-font-size: 14px;
+            --ui-transition:  0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ===================== БАЗОВЫЕ СТИЛИ ===================== */
+        body {
+            font-family: 'VT323', monospace;
+            overflow: hidden;
+            margin: 0; padding: 0;
+            background-color: transparent !important;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: cover;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        body.has-bg { background-color: #0d0d12 !important; }
+
+        .cyber-text   { font-family: 'Orbitron', sans-serif; text-shadow: 0 0 10px var(--cat-eyes); }
+        .dynamic-font { font-size: var(--base-font-size); }
+
+        /* ===================== СТАТУСНЫЕ ПОЛОСКИ ===================== */
+        .stat-bar-container { width: 80px; height: 6px; background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 2px; overflow: hidden; }
+        .stat-bar-fill      { height: 100%; width: 100%; transition: width 0.5s; }
+        .fill-good  { background-color: #22c55e; }
+        .fill-warn  { background-color: #eab308; }
+        .fill-bad   { background-color: #ef4444; }
+
+        /* ===================== КОТ ===================== */
+        #cat-area { flex: 1; position: relative; overflow: hidden; }
+        #cyber-cat {
+            filter: drop-shadow(0 4px 0px rgba(0,0,0,0.5));
+            image-rendering: pixelated;
+            cursor: grab;
+            position: absolute;
+            transition: left 2s linear, top 2s linear, width 0.3s, height 0.3s;
+            -webkit-app-region: no-drag;
+            z-index: 20;
+            width: 128px; height: 128px;
+        }
+        #cyber-cat.no-transition { transition: none !important; }
+        #cyber-cat.dragging      { cursor: grabbing; transform: scale(1.1); transition: none !important; z-index: 50; }
+
+        .cat-idle-img    { animation: idle-bounce 1s   infinite steps(2); }
+        .cat-walking-img { animation: walk-bob    0.2s infinite steps(2); }
+        .cat-chasing-img { animation: walk-bob    0.1s infinite steps(2); }
+        .anim-eating     { animation: eat-shake   0.2s infinite; }
+        .anim-petting    { animation: pet-squish  0.4s infinite alternate; }
+        .anim-playing    { animation: play-jump   0.5s ease-in-out; }
+        .anim-sleeping   { opacity: 0.9; transform: translateY(5px); }
+
+        .debuff-tired    { animation: tired-sway  1.5s infinite ease-in-out; filter: drop-shadow(0 0 6px #f59e0b); }
+        .debuff-hungry   { animation: hungry-shake 0.8s infinite ease-in-out; filter: drop-shadow(0 0 6px #ef4444); }
+        .debuff-sad      { animation: sad-droop   2s infinite ease-in-out; filter: drop-shadow(0 0 6px #6366f1) grayscale(0.4); }
+
+        @keyframes idle-bounce  { 0% { transform: translateY(0); }   100% { transform: translateY(2px); } }
+        @keyframes walk-bob     { 0% { transform: translateY(0); }   50%  { transform: translateY(-4px); } }
+        @keyframes eat-shake    { 0%,100% { transform: rotate(0deg) translateY(2px); } 25% { transform: rotate(-3deg) translateY(4px); } 75% { transform: rotate(3deg) translateY(4px); } }
+        @keyframes pet-squish   { 0% { transform: scaleY(1); }       100% { transform: scaleY(0.85) translateY(5px); } }
+        @keyframes play-jump    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-30px) scale(1.1); } }
+        @keyframes tired-sway   { 0%,100% { transform: rotate(-2deg) translateY(1px); } 50% { transform: rotate(2deg) translateY(3px); } }
+        @keyframes hungry-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+        @keyframes sad-droop    { 0%,100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(4px) scaleY(0.95); } }
+
+        /* ===================== ЛАЗЕР ===================== */
+        #laser-dot {
+            position: absolute; width: 10px; height: 10px;
+            background-color: #ff0000; border-radius: 50%;
+            box-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+            pointer-events: none; z-index: 100; display: none;
+        }
+
+        /* ===================== UI-КОМПОНЕНТЫ ===================== */
+        .pixel-box {
+            background: rgba(17, 24, 39, 0.95);
+            border: 2px solid var(--cat-accent);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.8);
+            border-radius: 4px;
+            backdrop-filter: blur(4px);
+        }
+        .close-btn-mini {
+            position: absolute; top: 2px; right: 2px;
+            width: 16px; height: 16px;
+            background: #ef4444; color: white;
+            border-radius: 2px; font-size: 10px;
+            line-height: 16px; text-align: center;
+            cursor: pointer; opacity: 0.8; z-index: 50;
+        }
+        .close-btn-mini:hover { opacity: 1; }
+        .dock-btn {
+            background: rgba(31, 41, 55, 0.8);
+            border: 1px solid #374151; color: #9ca3af;
+            transition: all 0.2s;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 6px; flex-shrink: 0;
+        }
+        .dock-btn:hover        { border-color: var(--cat-accent); color: white; background: rgba(31,41,55,1); transform: translateY(-2px); }
+        .dock-btn.active       { border-color: #22c55e; color: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.3); }
+        .dock-btn.danger:hover { border-color: #ef4444; color: #ef4444; }
+        .btn-pixel {
+            background: rgba(31, 41, 55, 0.9);
+            border: 1px solid #374151; color: #e5e7eb;
+            transition: all 0.1s; cursor: pointer;
+        }
+        .btn-pixel:hover { border-color: var(--cat-accent); color: white; background: rgba(31,41,55,1); }
+
+        /* ===================== ЧАТ-БАББЛ ===================== */
+        .chat-bubble { opacity: 0; transition: opacity 0.2s; transform: translateY(10px); pointer-events: none; }
+        .chat-bubble.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+        /* ===================== СТАТУС-ПОПАП ===================== */
+        #stats-popup { opacity: 0; pointer-events: none; transform: translateY(10px); transition: all 0.2s; }
+        #stats-popup.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+        /* ===================== ЛЕВАЯ ПАНЕЛЬ (DOCK) ===================== */
+        #ui-left {
+            position: absolute; bottom: 0; left: 0;
+            z-index: 50; padding: 0 0 8px 8px;
+            display: flex; flex-direction: column; gap: 6px;
+            align-items: flex-start; pointer-events: auto;
+            transition: transform var(--ui-transition), opacity var(--ui-transition);
+        }
+        #ui-left.ui-hidden { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
+
+        #ui-toggle-btn {
+            position: absolute; bottom: 12px; left: 12px; z-index: 100;
+            width: 32px; height: 32px;
+            background: rgba(17, 24, 39, 0.7); border: 1px solid var(--cat-accent);
+            border-radius: 6px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--cat-accent); transition: all 0.2s;
+            pointer-events: auto; opacity: 0; transform: scale(0.8);
+        }
+        #ui-toggle-btn.visible { opacity: 1; transform: scale(1); }
+        #ui-toggle-btn:hover { background: rgba(168,85,247,0.2); transform: scale(1.1); }
+        #toggle-notif-badge {
+            position: absolute; top: -4px; right: -4px;
+            width: 10px; height: 10px; background: #ef4444; border-radius: 50%;
+            display: none; box-shadow: 0 0 6px #ef4444;
+        }
+
+        /* ===================== ИКОНКИ ДЕБАФОВ ===================== */
+        #debuff-icons {
+            position: absolute; top: -28px; left: 50%;
+            transform: translateX(-50%); display: flex; gap: 4px;
+            pointer-events: none; z-index: 30;
+        }
+        .debuff-icon { font-size: 16px; animation: debuff-pulse 1.2s infinite alternate; filter: drop-shadow(0 0 4px rgba(255,255,255,0.3)); }
+        @keyframes debuff-pulse { 0% { transform: scale(1); } 100% { transform: scale(1.2); } }
+
+        /* ===================== INPUT DOCK ===================== */
+        #input-dock {
+            flex-shrink: 0; background: rgba(17, 24, 39, 0.92);
+            border-top: 2px solid var(--cat-accent); backdrop-filter: blur(8px);
+            padding: 8px 12px; display: flex; align-items: flex-end; gap: 8px;
+            min-height: 52px; max-height: 160px; position: relative;
+            z-index: 40; pointer-events: auto;
+            transition: transform var(--ui-transition), opacity var(--ui-transition);
+        }
+        #input-dock.ui-hidden { transform: translateY(100%); opacity: 0; pointer-events: none; }
+        #input-dock-textarea {
+            flex: 1; background: rgba(0,0,0,0.4); border: 1px solid #374151;
+            border-radius: 6px; color: white; padding: 8px 10px;
+            font-family: 'VT323', monospace; font-size: var(--base-font-size);
+            resize: none; outline: none; min-height: 36px; max-height: 120px;
+            overflow-y: auto; line-height: 1.4; transition: border-color 0.2s;
+        }
+        #input-dock-textarea:focus { border-color: var(--cat-accent); }
+        #input-dock-textarea::placeholder { color: #4b5563; }
+        .input-dock-btn {
+            width: 36px; height: 36px; flex-shrink: 0;
+            background: rgba(31,41,55,0.8); border: 1px solid #374151;
+            border-radius: 6px; color: #9ca3af; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        .input-dock-btn:hover { border-color: var(--cat-accent); color: white; }
+        #input-send-btn {
+            width: 36px; height: 36px; flex-shrink: 0;
+            background: rgba(168,85,247,0.2); border: 1px solid var(--cat-accent);
+            border-radius: 6px; color: var(--cat-accent); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        #input-send-btn:hover { background: rgba(168,85,247,0.4); color: white; }
+        #input-dock.drag-over { border-top-color: #22c55e; background: rgba(34,197,94,0.05); }
+        #input-dock::after {
+            content: '📎 Перетащи файл сюда'; position: absolute; inset: 0;
+            background: rgba(34,197,94,0.08); border: 2px dashed #22c55e;
+            border-radius: 4px; color: #22c55e; display: none;
+            align-items: center; justify-content: center;
+            font-size: 14px; pointer-events: none; z-index: 10;
+        }
+        #input-dock.drag-over::after { display: flex; }
+
+        /* ===================== ЖУРНАЛ СОБЫТИЙ ===================== */
+        #event-log {
+            position: absolute; bottom: 0; left: 50%;
+            transform: translateX(-50%) translateY(100%);
+            width: min(480px, 90vw); z-index: 60;
+            transition: transform var(--ui-transition), opacity var(--ui-transition);
+            opacity: 0; pointer-events: none;
+        }
+        #event-log.visible { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+        #event-log-inner { background: rgba(10,14,23,0.97); border: 2px solid var(--cat-accent); border-bottom: none; border-radius: 8px 8px 0 0; overflow: hidden; }
+        #event-log-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #1f2937; background: rgba(0,0,0,0.3); }
+        #event-log-body { height: 220px; overflow-y: auto; padding: 6px 8px; }
+        #event-log-filters { display: flex; gap: 4px; padding: 4px 8px; border-bottom: 1px solid #1f2937; background: rgba(0,0,0,0.2); }
+        .log-filter-btn { font-size: 10px; padding: 2px 8px; border-radius: 3px; cursor: pointer; border: 1px solid #374151; color: #6b7280; background: transparent; transition: all 0.15s; font-family: 'VT323', monospace; }
+        .log-filter-btn.active { border-color: var(--cat-accent); color: var(--cat-accent); }
+        .log-entry { display: flex; gap: 6px; align-items: flex-start; padding: 3px 4px; border-radius: 3px; font-size: 12px; line-height: 1.4; transition: background 0.15s; }
+        .log-entry:hover { background: rgba(255,255,255,0.04); }
+        .log-entry .log-time   { color: #4b5563; flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+        .log-entry .log-sender { font-weight: bold; flex-shrink: 0; }
+        .log-entry .log-text   { color: #d1d5db; flex: 1; word-break: break-word; }
+        .log-entry .log-copy   { opacity: 0; cursor: pointer; color: #6b7280; flex-shrink: 0; font-size: 10px; transition: opacity 0.15s; }
+        .log-entry:hover .log-copy { opacity: 1; }
+
+        /* ===================== ДЕБАФ-СТАТУСЫ ===================== */
+        #debuff-status-bar { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 45; pointer-events: none; }
+        .debuff-pill { background: rgba(17,24,39,0.9); border: 1px solid #374151; border-radius: 20px; padding: 2px 10px; font-size: 11px; color: #9ca3af; display: flex; align-items: center; gap: 4px; animation: debuff-fadein 0.3s ease; }
+        .debuff-pill.tired  { border-color: #f59e0b; color: #f59e0b; }
+        .debuff-pill.hungry { border-color: #ef4444; color: #ef4444; }
+        .debuff-pill.sad    { border-color: #6366f1; color: #818cf8; }
+        @keyframes debuff-fadein { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+        ::-webkit-scrollbar       { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div id="laser-dot"></div>
+
+    <!-- ===================== ЗОНА КОТА ===================== -->
+    <div id="cat-area">
+        <div id="debuff-status-bar"></div>
+
+        <button id="ui-toggle-btn" title="Показать панель управления">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <div id="toggle-notif-badge"></div>
+        </button>
+
+        <!-- Журнал событий -->
+        <div id="event-log">
+            <div id="event-log-inner">
+                <div id="event-log-header">
+                    <span class="text-xs font-bold cyber-text text-white">📜 ЖУРНАЛ</span>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <span id="log-count" class="text-[10px] text-gray-500">0 записей</span>
+                        <button onclick="clearLog()" class="text-[10px] text-red-400 hover:text-red-300 border border-red-900 rounded px-2 py-0.5">Очистить</button>
+                        <div class="close-btn-mini" style="position:static;width:18px;height:18px;line-height:18px;" onclick="toggleLog()">x</div>
+                    </div>
+                </div>
+                <div id="event-log-filters">
+                    <button class="log-filter-btn active" data-filter="all"    onclick="setLogFilter('all')">Все</button>
+                    <button class="log-filter-btn"        data-filter="chat"   onclick="setLogFilter('chat')">💬 Чат</button>
+                    <button class="log-filter-btn"        data-filter="system" onclick="setLogFilter('system')">⚙️ Система</button>
+                    <button class="log-filter-btn"        data-filter="debuff" onclick="setLogFilter('debuff')">💀 Дебафы</button>
+                </div>
+                <div id="event-log-body"></div>
+            </div>
+        </div>
+
+        <!-- Левая панель управления -->
+        <div id="ui-left">
+            <!-- Попап статусов -->
+            <div id="stats-popup" class="mb-1">
+                <div class="pixel-box p-3 w-48 bg-gray-900/95 relative">
+                    <div class="close-btn-mini" onclick="toggleStats()">x</div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold cyber-text text-white">СОСТОЯНИЕ</span>
+                        <span id="cat-status-label" class="text-[10px] text-green-400">ONLINE</span>
+                    </div>
+                    <div class="space-y-2 text-[10px] text-gray-300">
+                        <div class="flex items-center justify-between"><span>ГОЛОД</span><div class="stat-bar-container"><div id="bar-hunger" class="stat-bar-fill fill-good"></div></div></div>
+                        <div class="flex items-center justify-between"><span>ЭНЕРГИЯ</span><div class="stat-bar-container"><div id="bar-energy" class="stat-bar-fill fill-good"></div></div></div>
+                        <div class="flex items-center justify-between"><span>НАСТРОЕНИЕ</span><div class="stat-bar-container"><div id="bar-mood" class="stat-bar-fill fill-good"></div></div></div>
+                    </div>
+                    <div id="debuff-list-popup" class="mt-2 space-y-1"></div>
+                </div>
+            </div>
+
+            <!-- Кнопки дока — добавлены 📅 📝 📜 -->
+            <div class="flex gap-2 p-2 pixel-box bg-gray-900/80 backdrop-blur-sm rounded-lg" id="dock-buttons">
+                <button onclick="toggleStats()"      id="btn-stats"    class="dock-btn"        title="Статус">    <i data-lucide="activity"    class="w-4 h-4"></i></button>
+                <div class="w-px bg-gray-700 h-6 self-center mx-1"></div>
+                <button onclick="toggleSound()"      id="btn-sound"    class="dock-btn active" title="Звук">      <i data-lucide="volume-2"    class="w-4 h-4"></i></button>
+                <button onclick="toggleLaser()"      id="laser-btn"    class="dock-btn"        title="Лазер">     <i data-lucide="crosshair"   class="w-4 h-4 text-red-400"></i></button>
+                <button onclick="toggleLog()"        id="btn-log"      class="dock-btn"        title="Журнал">    <i data-lucide="scroll-text" class="w-4 h-4"></i></button>
+                <button onclick="toggleSettings()"                      class="dock-btn"        title="Настройки"><i data-lucide="settings"    class="w-4 h-4"></i></button>
+                <div class="w-px bg-gray-700 h-6 self-center mx-1"></div>
+                <!-- v2: Новые кнопки -->
+                <button onclick="CalendarUI.toggle()" id="btn-calendar" class="dock-btn"       title="Календарь"><span style="font-size:15px">📅</span></button>
+                <button onclick="NotesUI.toggle()"    id="btn-notes"    class="dock-btn"       title="Заметки">  <span style="font-size:15px">📝</span></button>
+                <button onclick="LogUI.toggle()"      id="btn-logv2"    class="dock-btn"       title="Журнал v2"><span style="font-size:15px">📜</span></button>
+                <div class="w-px bg-gray-700 h-6 self-center mx-1"></div>
+                <button onclick="toggleUI()"         id="btn-hide-ui"  class="dock-btn"        title="Свернуть"> <i data-lucide="minimize-2"  class="w-4 h-4"></i></button>
+                <button onclick="window.close()"                         class="dock-btn danger" title="Выход">   <i data-lucide="power"       class="w-4 h-4"></i></button>
+            </div>
+        </div>
+
+        <!-- Скрытые file-инпуты -->
+        <input type="file" id="custom-skin-input"  class="hidden" accept="image/*">
+        <input type="file" id="custom-sleep-input" class="hidden" accept="image/*">
+        <input type="file" id="custom-bg-input"    class="hidden" accept="image/*">
+        <input type="file" id="input-dock-file"    class="hidden" accept="image/*">
+
+        <!-- ===================== КОТ ===================== -->
+        <div id="cyber-cat" class="absolute flex justify-center items-center" style="left: 50%; top: 50%;">
+            <div id="debuff-icons"></div>
+            <div id="cat-chat" class="chat-bubble absolute bottom-full mb-2 w-64 p-1 z-30">
+                <div class="pixel-box p-3 relative">
+                    <div class="close-btn-mini" onclick="hideChat()">x</div>
+                    <div id="chat-content" class="text-white mb-2 font-bold break-words pr-4 dynamic-font">Мур-мур!</div>
+                    <div id="action-buttons" class="grid grid-cols-2 gap-2 mb-2">
+                        <button onclick="performAction('feed')"  class="btn-pixel py-1 rounded text-xs text-yellow-300 hover:bg-yellow-900/50">🍗 Еда</button>
+                        <button onclick="performAction('pet')"   class="btn-pixel py-1 rounded text-xs text-pink-300   hover:bg-pink-900/50">💖 Гладить</button>
+                        <button onclick="performAction('play')"  class="btn-pixel py-1 rounded text-xs text-blue-300   hover:bg-blue-900/50">🧶 Играть</button>
+                        <button onclick="performAction('sleep')" class="btn-pixel py-1 rounded text-xs text-indigo-300 hover:bg-indigo-900/50">💤 Спать</button>
+                        <button onclick="toggleChatInput()"      class="btn-pixel col-span-2 py-1 rounded text-xs text-white bg-gray-700">💬 Ответить</button>
+                    </div>
+                    <div id="chat-bubble-input" class="hidden border-t border-gray-600 pt-2">
+                        <input type="text" id="bubble-msg"
+                            class="w-full bg-black/50 border border-gray-600 px-2 py-1 text-white focus:border-white outline-none rounded font-mono dynamic-font"
+                            placeholder="Сообщение...">
+                    </div>
+                </div>
+            </div>
+            <div id="visual-container" class="w-full h-full relative pointer-events-none">
+                <img id="custom-cat-img" src="cat.png" class="w-full h-full object-contain absolute inset-0 cat-idle-img"
+                     style="image-rendering: pixelated;" draggable="false" onerror="this.src='cat.png'" alt="Yuma">
+            </div>
+        </div>
+    </div><!-- /cat-area -->
+
+    <!-- ===================== НИЖНЯЯ ПАНЕЛЬ ВВОДА ===================== -->
+    <div id="input-dock">
+        <button class="input-dock-btn" onclick="document.getElementById('input-dock-file').click()" title="Прикрепить файл">
+            <i data-lucide="paperclip" class="w-4 h-4"></i>
+        </button>
+        <textarea id="input-dock-textarea"
+                  placeholder="Напиши Юме... (Enter — отправить) | /note текст | /remind 10m текст | /cal"
+                  rows="1"></textarea>
+        <button id="input-send-btn" title="Отправить (Enter)">
+            <i data-lucide="send" class="w-4 h-4"></i>
+        </button>
+    </div>
+
+    <!-- ===================== МОДАЛ НАСТРОЕК ===================== -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center">
+        <div class="pixel-box p-6 w-96 bg-gray-900 pointer-events-auto relative max-h-[90vh] overflow-y-auto">
+            <div class="close-btn-mini" style="top:10px;right:10px;width:24px;height:24px;font-size:14px;line-height:24px;" onclick="toggleSettings()">x</div>
+            <h2 class="text-white font-bold mb-4 text-center border-b border-gray-700 pb-2">НАСТРОЙКИ</h2>
+            <div class="space-y-4">
+                <div class="border border-gray-700 p-2 rounded">
+                    <h3 class="text-xs font-bold text-fuchsia-400 mb-2">МОЗГ (AI)</h3>
+                    <div class="space-y-2">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">ПРОВАЙДЕР</label>
+                            <select id="provider-select" onchange="updateProviderUI()" class="w-full bg-black border border-gray-600 p-1 text-white text-xs rounded">
+                                <option value="openrouter">OpenRouter</option>
+                                <option value="gemini">Google Gemini (Beta)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">API KEY</label>
+                            <input type="password" id="api-key" class="w-full bg-black border border-gray-600 p-1 text-white text-xs rounded" placeholder="sk-...">
+                        </div>
+                        <div id="model-container">
+                            <label class="block text-[10px] text-gray-400 mb-1">МОДЕЛЬ</label>
+                            <input type="text" id="model-name" class="w-full bg-black border border-gray-600 p-1 text-white text-xs rounded" value="mistralai/mistral-7b-instruct:free">
+                        </div>
+                    </div>
+                </div>
+                <div class="border border-gray-700 p-2 rounded">
+                    <h3 class="text-xs font-bold text-green-400 mb-2">ЛИЧНОСТЬ</h3>
+                    <div class="space-y-2">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">ВАШЕ ИМЯ</label>
+                            <input type="text" id="user-name-input" class="w-full bg-black border border-gray-600 p-1 text-white text-xs rounded" placeholder="Хозяин">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">ХАРАКТЕР КОТА (ПРОМТ)</label>
+                            <textarea id="cat-prompt-input" rows="3" class="w-full bg-black border border-gray-600 p-1 text-white text-xs rounded"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="border border-gray-700 p-2 rounded">
+                    <h3 class="text-xs font-bold text-blue-400 mb-2">ВНЕШНОСТЬ</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">СКОРОСТЬ</label>
+                            <input type="range" id="speed-input" min="0.5" max="5.0" step="0.5" value="2.0" class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">РАЗМЕР КОТА (x<span id="scale-val">1.0</span>)</label>
+                            <input type="range" id="scale-input" min="0.5" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('scale-val').innerText=this.value" class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-gray-400 mb-1">РАЗМЕР ШРИФТА (<span id="font-val">14</span>px)</label>
+                            <input type="range" id="font-input" min="10" max="24" step="1" value="14" oninput="document.getElementById('font-val').innerText=this.value" class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <button onclick="document.getElementById('custom-skin-input').click()"  class="btn-pixel py-1 text-[10px]">Скин</button>
+                            <button onclick="document.getElementById('custom-bg-input').click()"    class="btn-pixel py-1 text-[10px]">Фон</button>
+                            <button onclick="document.getElementById('custom-sleep-input').click()" class="btn-pixel py-1 text-[10px]">Сон</button>
+                            <div></div>
+                            <button onclick="resetSkin()"       class="btn-pixel py-1 text-[10px] text-red-400">Сброс Скина</button>
+                            <button onclick="resetBackground()" class="btn-pixel py-1 text-[10px] text-red-400">Сброс Фона</button>
+                            <button onclick="resetSleep()"      class="btn-pixel py-1 text-[10px] text-red-400">Сброс Сна</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="toggleSettings()" class="flex-1 btn-pixel py-2 text-gray-400 text-xs">Отмена</button>
+                <button onclick="saveSettings()"   class="flex-1 btn-pixel py-2 text-green-400 text-xs font-bold">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>lucide.createIcons();</script>
+    <!-- v2: Календарь, Заметки, Журнал v2, Напоминания -->
+    <script src="yuma-update-v2.js"></script>
+    <script src="renderer.js"></script>
+</body>
+</html>
